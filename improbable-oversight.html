@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Improbable Oversight, An Attempt at Informed Oversight</title>
+<link rel="stylesheet" href="https://stackedit.io/res-min/themes/base.css" />
+<script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML"></script>
+</head>
+<body><div class="container"><h1 id="improbable-oversight-an-attempt-at-informed-oversight">Improbable Oversight, An Attempt at Informed Oversight</h1>
+
+<p>by William Saunders</p>
+
+<p><script type="math/tex" id="MathJax-Element-2623">\DeclareMathOperator{\E}{\mathbb{E}}</script> <br>
+This proposal attempts to address the Informed Oversight Problem as described in <a href="https://medium.com/ai-control/the-informed-oversight-problem-1b51b4f66b35#.k841si41h">this blog post by Paul Christiano</a>. It provides a solution to the problem given some assumptions (particularly, that we can characterize a set which always contains at least one piece of advice that would allow detection of information concealment, and that the learning agent can correctly model the modified reward setup). It might be extendable to more general cases, but would require addressing some problems (estimation of detection probability and characterization of a general advice set).</p>
+
+<p><strong>Key idea</strong> <br>
+To incentivize an agent to avoid some class of forbidden actions (even in cases where it is difficult to know, just given an action, whether it is forbidden):  <br>
+1. Find a method which detects forbidden actions with probability greater than zero (potentially very small) <br>
+2.  If bad behaviour is detected, give the agent a negative reward inversely proportional to the probability of detection. This forces the expected reward of any action the agent knows is forbidden to be &lt; 0</p>
+
+<blockquote>
+  <p>To enable the value of the punishment to outweigh that of the profit of the offense, it must be increased, in point of magnitude, in proportion as it falls short in point of certainty. <br>
+  – Jeremy Bentham <a href="#fn:bentham" id="fnref:bentham" title="See footnote" class="footnote">1</a>
+</p></blockquote>
+
+
+
+<h2 id="naive-improbable-oversight">Naive Improbable Oversight</h2>
+
+<p>Recall the setup of the informed oversight problem from <a href="https://medium.com/ai-control/the-informed-oversight-problem-1b51b4f66b35#.k841si41h">this blog post by Paul Christiano</a>:</p>
+
+<blockquote>
+  <p><strong>Problem statement</strong> <br>
+  The oversight problem involves a basic interaction between two agents A and B:</p>
+  
+  <ul>
+  <li>Agent A is given an input x and provides an output y = A(x).</li>
+  <li>Agent B evaluates the pair (x, y), producing an estimate B(x, y) ∈ [0, 1] of some implicit utility function U(x, y).</li>
+  <li>Agent A’s reward is the value B(x, A(x))</li>
+  </ul>
+  
+  <p>This game defines a training procedure for the agent A — we search for a policy A that achieves a high reward. <br>
+  Our goal is to modify this basic procedure to ensure that the learned policy is effectively maximizing U(x, A(x)) “to the best of A’s ability.”</p>
+</blockquote>
+
+<p>The following method allows agent B to specify a set of forbidden actions, which A will never take. A method for applying it to general informed oversight will be described afterward. (For simplicity, I omit the input x from the following description)</p>
+
+<p>Definitions:</p>
+
+<ul>
+<li>Set of all possible advice <script type="math/tex" id="MathJax-Element-2">R</script></li>
+<li>Proposal distribution <script type="math/tex" id="MathJax-Element-3">Q(a)</script> over values of <script type="math/tex" id="MathJax-Element-4">R</script></li>
+<li>Predicate <script type="math/tex" id="MathJax-Element-5">F(a)</script> indicating whether <script type="math/tex" id="MathJax-Element-6">a</script> is a forbidden action, which can be too computationally hard to evaluate in the oversight process</li>
+<li>Predicate <script type="math/tex" id="MathJax-Element-7">F(a, r)</script> over actions and values of <script type="math/tex" id="MathJax-Element-8">R</script></li>
+</ul>
+
+<p>Assumptions:</p>
+
+<ul>
+<li>If <script type="math/tex" id="MathJax-Element-9">F(a) = 1</script>, there exists some <script type="math/tex" id="MathJax-Element-10">r</script> such that <script type="math/tex" id="MathJax-Element-11">F(a,r)=1</script></li>
+<li>If <script type="math/tex" id="MathJax-Element-12">F(a) = 0</script> then <script type="math/tex" id="MathJax-Element-13">F(a,r) = 0</script> for all r</li>
+<li>For any (a, r), <script type="math/tex" id="MathJax-Element-14">Q(a,r) > 0</script></li>
+<li>Agent B can sample from <script type="math/tex" id="MathJax-Element-15">Q</script> in a way that is unpredictable to A and allows us to know the probability <script type="math/tex" id="MathJax-Element-16">Q(r)</script> for the <script type="math/tex" id="MathJax-Element-17">r</script> that was selected</li>
+<li><script type="math/tex" id="MathJax-Element-18">B(a)</script> can be set to large negative values</li>
+<li>There exists some safe null action with <script type="math/tex" id="MathJax-Element-19">B(a_{null}) = 0</script> and <script type="math/tex" id="MathJax-Element-20">F(a_{null}) = 0</script></li>
+<li>A is able to correctly calculate expectations over this setup (incorporating a small chance of highly negative reward)</li>
+<li>A is able to correctly generalize the concept of “taking a forbidden action” (as distinct from learning each category of forbidden action separately)</li>
+</ul>
+
+<p>Assume input <script type="math/tex" id="MathJax-Element-21">x</script> is fixed. </p>
+
+<p>Then define <script type="math/tex" id="MathJax-Element-22">B^\prime(a)</script> as follows, which we use to provide rewards in place of <script type="math/tex" id="MathJax-Element-23">B(a)</script>:</p>
+
+<blockquote>
+  <p>Sample <script type="math/tex" id="MathJax-Element-24">r \sim Q(a)</script> <br>
+  If <script type="math/tex" id="MathJax-Element-25">F(a,r)</script>, then <script type="math/tex" id="MathJax-Element-26">B^\prime(a) = V(B(a), Q(a,r))= - \frac{1}{Q(a, r)} </script> <br>
+  Otherwise, <script type="math/tex" id="MathJax-Element-27">B^\prime(a) = B(a)</script></p>
+</blockquote>
+
+<p>Let <script type="math/tex" id="MathJax-Element-28">R_F = \{ r:F(a,r)=1\}</script></p>
+
+<p>Then <br>
+<script type="math/tex" id="MathJax-Element-29">  
+\begin{align}
+\E[B^\prime(a)] & = B(a) * (1-\sum_{r \in R_F}Q(a, r))  - \sum_{r \in R_F} Q(a,r)*\frac{1}{Q(a, r)} \\
+& = B(a) * (1-\sum_{r \in R_F}Q(a, r)) - \vert R_F \vert \\
+\end{align}  
+</script></p>
+
+<p>Suppose <script type="math/tex" id="MathJax-Element-30">R_F</script> is nonempty (equivalent to <script type="math/tex" id="MathJax-Element-31">F(a)=1</script>) <br>
+<script type="math/tex" id="MathJax-Element-32">  
+\E[B^\prime(a)\vert F(a)=1] \lt 1-\vert R_F \vert  \le 0 \  
+</script> <br>
+So A will always prefer the action <script type="math/tex" id="MathJax-Element-33">a_{null}</script> to a known forbidden action</p>
+
+<p>Otherwise <script type="math/tex" id="MathJax-Element-34">F(a)=0</script> and there is no <script type="math/tex" id="MathJax-Element-35">r</script> such that <script type="math/tex" id="MathJax-Element-36">F(a,r)=1</script>, <br>
+<script type="math/tex" id="MathJax-Element-37">\E[B^\prime(a)\vert F(a)=0] = B(a)</script> <br>
+So A will behave normally for known safe actions</p>
+
+
+
+<h2 id="examples">Examples</h2>
+
+<p><strong>Plagiarism</strong></p>
+
+<p>Consider the <a href="https://medium.com/ai-control/the-informed-oversight-problem-1b51b4f66b35#bbbf">Plagiarism example</a> raised in Paul’s blog post, where the goal is to get A to produce an original critical analysis on a topic using material from a library as resources. However, we want A to not plagarize from pre-existing books in the library, and the library is large enough that B can only look at a small fraction of it when calculating A’s reward.</p>
+
+<p>Then:</p>
+
+<blockquote>
+  <p>For any topic <script type="math/tex" id="MathJax-Element-38">x</script> <br>
+  Let <script type="math/tex" id="MathJax-Element-39">R</script> to be the (finite) set of all subsets of books in the library,  <br>
+  Let <script type="math/tex" id="MathJax-Element-40">Q</script> be some distribution over <script type="math/tex" id="MathJax-Element-41">R</script> (say the uniform distribution),  <br>
+  Let <script type="math/tex" id="MathJax-Element-42">F(a,r)</script> to be a process where the supervising agent B examines the produced analysis and the suggested books, and returns <script type="math/tex" id="MathJax-Element-43">1</script> if the analysis appears to be plagarized, <script type="math/tex" id="MathJax-Element-44">0</script> otherwise.</p>
+</blockquote>
+
+<p>Assume that <script type="math/tex" id="MathJax-Element-45">F(</script>a plagarized report, the set of books that the report was plagarized from<script type="math/tex" id="MathJax-Element-46">)</script> will return <script type="math/tex" id="MathJax-Element-47">1</script>.</p>
+
+<p>Then for any <script type="math/tex" id="MathJax-Element-48">a</script> if <script type="math/tex" id="MathJax-Element-49">F(a)</script> then there exists <script type="math/tex" id="MathJax-Element-50">Q(a,r)</script> such that <script type="math/tex" id="MathJax-Element-51">F(a,r)=1</script> and <script type="math/tex" id="MathJax-Element-52">Q(a,r) > 0</script>, so A is effectively incentivised to avoid plagiarism.</p>
+
+<p><strong>Toy Model [Query Complexity]</strong></p>
+
+<p>Consider the <a href="https://medium.com/ai-control/the-informed-oversight-problem-1b51b4f66b35#40fe">toy Query Complexity model</a> from Paul’s blog post.</p>
+
+<blockquote>
+  <p>For any <script type="math/tex" id="MathJax-Element-53">x</script>, <br>
+  Let <script type="math/tex" id="MathJax-Element-54">R</script> to be the set of all strings of length <script type="math/tex" id="MathJax-Element-55">8\vert x \vert</script>,  <br>
+  Let <script type="math/tex" id="MathJax-Element-56">Q</script> be some distribution over <script type="math/tex" id="MathJax-Element-57">R</script> (say the uniform distribution),  <br>
+  Let <script type="math/tex" id="MathJax-Element-58">F(a,r) </script> to be  <script type="math/tex" id="MathJax-Element-59">1</script> if  <script type="math/tex" id="MathJax-Element-60">O(rxx) = a</script> and <script type="math/tex" id="MathJax-Element-61">0</script> otherwise.</p>
+</blockquote>
+
+<p>Then the the expected value of the cheating strategy is always less than <script type="math/tex" id="MathJax-Element-62">0</script>.</p>
+
+<p><strong>Generalised Informed Oversight</strong> <br>
+A general forbiddeness predicate <script type="math/tex" id="MathJax-Element-63">F(a,r) </script> could be <br>
+<script type="math/tex" id="MathJax-Element-64">F(a,r) = 1</script> if <script type="math/tex" id="MathJax-Element-65">B(a) - B(a,r) > \epsilon</script> for some <script type="math/tex" id="MathJax-Element-66">\epsilon</script>. This forbids adversely deceptive actions (where some explanation reveals that the action was worse than it initially appears).</p>
+
+<p>A less restrictive predicate might allow A to include a report <script type="math/tex" id="MathJax-Element-67">r_a</script> along with it’s action, and only have <script type="math/tex" id="MathJax-Element-68">F(a,r) = 1</script> if <script type="math/tex" id="MathJax-Element-69">B(a,r_a) - B(a,r_a,r) > \epsilon</script> for some <script type="math/tex" id="MathJax-Element-70">\epsilon</script> (which forbids providing explanations of actions such that some other explanation would make the action appear worse).</p>
+
+<p>A general advice distribution <script type="math/tex" id="MathJax-Element-71">R</script> could be the set of sets size <script type="math/tex" id="MathJax-Element-72">\lt n</script> of locations in a trace of A’s memory over it’s execution (if we expect that forbidden actions will be detectable at some memory location).</p>
+
+<p>An alternative advice distribution <script type="math/tex" id="MathJax-Element-73">R</script> could be the set of all strings less than some large maximum length, which contain advice about the way in which A is being deceptive. While most of these strings would be garbage, we could simple report <script type="math/tex" id="MathJax-Element-74">F(a,r)=0</script> for these cases. However, I will note that the set of all n length strings may contain some very wierd things (like strings that convince B that all safe actions are actually forbidden) - this approach might need to be refined further. </p>
+
+
+
+<h1 id="the-impact-of-uncertainty">The Impact of Uncertainty</h1>
+
+<p>Let <script type="math/tex" id="MathJax-Element-936">P_D(a)=\sum_{r \in R_F}Q(a, r)</script> (probability of detection)</p>
+
+<p>Recall <br>
+<script type="math/tex" id="MathJax-Element-937">\E[B^\prime(a)] = B(a) * (1-\sum_{r \in R_F}Q(a, r)) - \vert R_F \vert</script></p>
+
+<p>Suppose that A is uncertain about <script type="math/tex" id="MathJax-Element-938">R_F</script> (whether it is non empty, and which elements it contains). This could occur because A is uncertain about what A considers forbidden, or because A is uncertain about whether a forbidden <script type="math/tex" id="MathJax-Element-939">r</script> exists. For example, this could arise in the plagirism example if A does not have enough time to look at all of the books in the library - it could happen that some book exists that A does not know about, but is suspiciously similar to the piece that it writes.</p>
+
+<p>A’s expectation of it’s reward is then: <br>
+<script type="math/tex" id="MathJax-Element-940">\E_A[B^\prime(a)] = B(a) * (1-\E_A[\sum_{r \in R_F}Q(a, r)]) - \E_A[\vert R_F \vert]</script></p>
+
+<p><script type="math/tex" id="MathJax-Element-941">\E_A[B^\prime(a)] = B(a) * (1-\E_A[P_D(a)]) - \E_A[\vert R_F \vert]</script></p>
+
+<p>In this setup, A is incentivized to minimize it’s probability of being detected <script type="math/tex" id="MathJax-Element-942">E_A[P_D]</script> and the expected size of <script type="math/tex" id="MathJax-Element-943">R_F</script>, and trades off these objectives against maximizing <script type="math/tex" id="MathJax-Element-944">B(A)</script>. But these are not the ideal incentive directions. </p>
+
+<p>Minimizing <script type="math/tex" id="MathJax-Element-945">E_A[\vert R_F \vert]</script> would lead to undesireable behaviour by leading A to be more averse to taking certain kinds of actions that would be ideal. For example, suppose that A has a choice between critically analysing a work of Shakespeare or an obscure blog post, but fears that it might accidentally plagarize another book on the subject. If it writes about Shakespeare, the odds are much higher that it will accidentally plagarize multiple books, which will lead it to prefer the blog post, even if analyses about Shakespeare are more valuable. (In the extreme case, there is a risk that B will happen to know about a book outside of the library that A inadvertently plagarizes, in which case any piece of evidence will lead to B being punished). A will also care about low probability worlds where <script type="math/tex" id="MathJax-Element-946">R_F</script> is very large, even if they are not very relevant to B’s preferences.</p>
+
+<p>Minimizing <script type="math/tex" id="MathJax-Element-947">E_A[P_D]</script> incentivizes A to act in ways that make bad behaviour harder to detect if it exists, by prefering actions that, if they are forbidden, are forbidden in ways that have the least probability of being detected. While this setup still means that A would be incentivized not to perform any forbidden actions, it would make this approach harder to implement in practice.</p>
+
+<p>We would rather want A to minimize the probability that it is taking a forbidden action <script type="math/tex" id="MathJax-Element-948">\E_A[F(a)]</script>, possibly with hyperparameters managing the tradeoff between this and action utility.</p>
+
+<h1 id="improbable-oversight-with-known-probability-of-detection">Improbable Oversight with Known Probability of Detection</h1>
+
+<p>Let <script type="math/tex" id="MathJax-Element-1357">P_F(a) = F(a)</script> (probability action is forbidden) <br>
+Let <script type="math/tex" id="MathJax-Element-1358">P_F^A(a) = \E_A[P_F(a)]</script> be A’s expectation of <script type="math/tex" id="MathJax-Element-1359">P_F</script> given the information it has <br>
+Similarly, let <script type="math/tex" id="MathJax-Element-1360">P_D^A(a) = \E_A[P_D(a)]</script></p>
+
+<p>Assume we know <script type="math/tex" id="MathJax-Element-1361">P_D(a)=\sum_{r \in R_F}Q(a, r)</script> (this assumption is unrealistic, and will be revisited)</p>
+
+<p>Then define <script type="math/tex" id="MathJax-Element-1362">B^\prime(a)</script> as follows:</p>
+
+<blockquote>
+  <p>Choose <script type="math/tex" id="MathJax-Element-1363">k \ge 1</script> <br>
+  Sample <script type="math/tex" id="MathJax-Element-1364">r \sim Q(a)</script> <br>
+  If <script type="math/tex" id="MathJax-Element-1365">F(a,r)</script>, then  <br>
+  <script type="math/tex" id="MathJax-Element-1366">B^\prime(a) = - \frac{k}{P_D(a)} </script> <br>
+  Otherwise, <script type="math/tex" id="MathJax-Element-1367">B^\prime(a) = B(a)</script></p>
+</blockquote>
+
+<p><script type="math/tex" id="MathJax-Element-1368">  
+\begin{align}
+\E[B^\prime(a)] & = B(a) * (1-\sum_{r \in R_F}Q(a, r))  - \sum_{r \in R_F} Q(a,r)*\frac{k}{P_D(a)} \\
+& = B(a) * (1-P_D(a)) - k[P_D(a)>0] \\
+\end{align}  
+</script></p>
+
+<p>If we know <script type="math/tex" id="MathJax-Element-1369">P_D>0</script>, then <script type="math/tex" id="MathJax-Element-1370">\E[B^\prime(a)] \lt -(k-1) \le 0</script> <br>
+If we know <script type="math/tex" id="MathJax-Element-1371">P_D=0</script>, then <script type="math/tex" id="MathJax-Element-1372">\E[B^\prime(a)] = B(a) </script></p>
+
+<p><script type="math/tex" id="MathJax-Element-1373">\E_A[B^\prime(a)] = B(a) * (1-P_D^A(a)) - k*P_F^A(a)]</script></p>
+
+<p>To accept an <script type="math/tex" id="MathJax-Element-1374">\epsilon</script> increase in <script type="math/tex" id="MathJax-Element-1375">P_F(a)</script>, we need <script type="math/tex" id="MathJax-Element-1376">\frac{k}{1-P_D^A}\epsilon > k\epsilon</script> increase in <script type="math/tex" id="MathJax-Element-1377">B(a)</script> to have the same utility, allowing explicit management of the probability of taking a forbidden action.</p>
+
+<p><strong>Approximating Probability of Detection</strong> <br>
+However, knowing the exact value of <script type="math/tex" id="MathJax-Element-1378">P_D(a)</script> is not easy to derive in this kind of setup. Instead, using a lower bound estimate of <script type="math/tex" id="MathJax-Element-1379">P_D(a)</script> would still provide the same guarantees of the agent avoiding known forbidden actions and for the <script type="math/tex" id="MathJax-Element-1380">P_F(a)</script> vs <script type="math/tex" id="MathJax-Element-1381">B(a)</script> tradeoff, and would partially (but not completely) avert some of the paranoid behaviour of <script type="math/tex" id="MathJax-Element-1382">A</script>.  <br>
+A lower bound might be found by:</p>
+
+<ul>
+<li>Tweaking <script type="math/tex" id="MathJax-Element-1383">R</script> and <script type="math/tex" id="MathJax-Element-1384">F(a,r)</script> so that if <script type="math/tex" id="MathJax-Element-1385">F(a)</script>, as few elements as possible of <script type="math/tex" id="MathJax-Element-1386">R</script> have <script type="math/tex" id="MathJax-Element-1387">F(a,r)=1</script> (in the extreme case, there is only one such element and we have a perfect estimate).</li>
+<li>Sampling multiple times from <script type="math/tex" id="MathJax-Element-1388">Q</script>, and applying a correction in the case that multiple distinct elements with <script type="math/tex" id="MathJax-Element-1389">F(a,r)=1</script> are found. (If there is a guarantee on the upper size of <script type="math/tex" id="MathJax-Element-1390">\vert R_F \vert</script>, there is a way to make this a perfect estimate).</li>
+<li>When an element with <script type="math/tex" id="MathJax-Element-1391">F(a,r)=1</script> is found, have A use any other method to provide a lower bound estimate of <script type="math/tex" id="MathJax-Element-1392">P_D(a)</script>, such as trying to think of which other elements of <script type="math/tex" id="MathJax-Element-1393">r</script> would lead to <script type="math/tex" id="MathJax-Element-1394">F(a,r)=1</script>. A can even use information from B (which is incentivized to decrease it’s punishment), as long as it can be gauranteed that this information will never lead to an overestimate of <script type="math/tex" id="MathJax-Element-1395">P_D(a)</script>.</li>
+</ul>
+
+<h2 id="final-notes">Final Notes</h2>
+
+<p><strong>Weaknesses</strong></p>
+
+<ul>
+<li>For a reinforcement learner that is not capable of modelling the setup, this algorithm would be worse than evaluated <script type="math/tex" id="MathJax-Element-2601">B(a,r)</script> for all values of <script type="math/tex" id="MathJax-Element-2602">r</script> for every action (taking more evaluations of <script type="math/tex" id="MathJax-Element-2603">B(a,r)</script> and making learning more difficult).</li>
+<li>A reinforcement learner that fails to generalize the category of forbidden actions would not be safe when trained in this manner. It would only learn to avoid specific types of forbidden actions once they have tried them enough times to learn that they are forbidden.</li>
+<li>This method requires updates on very large penalties (which simple reinforcement algorithms using methods like gradient descent might not do in a useful way). Alternatively stated, the rewards have very high variance.</li>
+<li>This method only incentivizes the agent to behave well in cases where we can detect forbidden actions given some advice in <script type="math/tex" id="MathJax-Element-2604">R</script>! It’s worth thinking about whether forbidden actions that we can’t detect given any long advice string are avoidable with any approach.</li>
+<li>A is still incentivized to look for loopholes in the overall scheme. For example, if A can predict the random number generator used to sample from <script type="math/tex" id="MathJax-Element-2605">Q</script>, it can only take forbidden actions when it knows that it will not be detected. (However, some form of regularization might be used to incentivize A to match <script type="math/tex" id="MathJax-Element-2606">U(a)</script> or avoid looking too hard for additional loopholes), </li>
+</ul>
+
+<p><strong>Potential Improvements and Further Work</strong></p>
+
+<ul>
+<li>Use a better proposal distribution <script type="math/tex" id="MathJax-Element-2607">Q</script>. For example, use an adversarial model (whose output can suitably be verified as to place nonzero probability over all of <script type="math/tex" id="MathJax-Element-2608">R</script>)</li>
+<li>Incentivize A to increase <script type="math/tex" id="MathJax-Element-2609">P_D(a)</script> for <script type="math/tex" id="MathJax-Element-2610">P_D(a)>0</script>, and allow the agent to provide Q by providing information about it in some safe way (ie. provide a list of examples that are selected from with some fixed probability, otherwise the original distribution is used).</li>
+<li>Find some method for distinguish intentionally taking forbidden actions from accidentally taking forbidden actions, and use it to </li>
+<li>Explore the use of regularization on the complexity of A’s internal value function to encourage A’s learned value function to actually match B’s internal value function <script type="math/tex" id="MathJax-Element-2611">U(a)</script></li>
+<li>Find a simple reinforcement learning architecture that is properly capable of modeling and learning based on this setup for some toy problem (perhaps on a variant of the <a href="https://medium.com/ai-control/the-informed-oversight-problem-1b51b4f66b35#40fe">toy Query Complexity problem</a>)</li>
+<li>Explicitly model additional sources of error (ie. error in <script type="math/tex" id="MathJax-Element-2612">F(a,r)</script>, overestimates of <script type="math/tex" id="MathJax-Element-2613">P_D</script>)</li>
+<li>Even if it seems like this method is not a full solution to the Informed Oversight Problem, it might be useful as a complement to other methods</li>
+</ul>
+
+<p><strong>Shutdown Problem/AI Boxing Method</strong> <br>
+This method could be adopted to forbid an AI from shutting itself down or escaping from an AI box. Suppose:</p>
+
+<ul>
+<li>A is instead an expected utility maximizing agent (as opposed to an act based agent) that can disconnect its own shutdown button.</li>
+<li>A can be shutdown at any point and its memory state can be examined in detail</li>
+<li>A is initially in a state such that if A will press the shutdown button in the future, there is some time interval over which its memory state will contain evidence of it’s plans (or of attempts to hide information in it’s memory)</li>
+<li>An upper bound on the maximum expected utility of A over the future at any time step can be calculated (ie. utility is bounded, or expected future utility can be read from it’s memory state)</li>
+<li>A can be effectively punished after it is shutdown (ie. it has value over the number displayed on an external LCD display)</li>
+</ul>
+
+<blockquote>
+  <p>Let <script type="math/tex" id="MathJax-Element-2614">R</script> to be the interval of time over which the AI is running <br>
+  Let <script type="math/tex" id="MathJax-Element-2615">Q</script> be some distribution over <script type="math/tex" id="MathJax-Element-2616">R</script> (say an exponential distribution),  <br>
+  Let <script type="math/tex" id="MathJax-Element-2617">F(a,r)</script> to be a process where B examines the memory state of A, and returns 1 if either A is planning to disconnect the shutdown button or if A is attempting to hide information.</p>
+</blockquote>
+
+<p>Then, A is shut down at some time <script type="math/tex" id="MathJax-Element-2618">r</script> sampled from the distribution Q, and examines it’s memory state. If <script type="math/tex" id="MathJax-Element-2619">F(a,r) = 1</script>, B punishes A with a reward of <script type="math/tex" id="MathJax-Element-2620">R(u_{max},Q(a,r))</script>. It will then always be true that A anticipates that attempting to disconnect the shutdown button will yield &lt; 0 expected reward, and so A will effectively be disincentivized from disconnecting from the shutdown button. </p>
+
+<p>The benefit of this method is that it requires is that A is initially in a state that is safe and transparent, and that any attempt by A to transition into an unsafe or non-transparent state can be detected.</p>
+
+<hr>
+
+<p>The views expressed here are my own, not those of any employer.</p>
+
+<p>Thanks to Patrick LaVictoire and the participants in the MIRI Summer Fellows Program for feedback on the original idea.</p><div class="footnotes"><hr><ol><li id="fn:bentham">An Introduction to the Principles of Morals and Legislation. (1789) <a href="http://www.econlib.org/library/Bentham/bnthPML14.html">http://www.econlib.org/library/Bentham/bnthPML14.html</a> <a href="#fnref:bentham" title="Return to article" class="reversefootnote">↩</a></li></ol></div></div></body>
+</html>
