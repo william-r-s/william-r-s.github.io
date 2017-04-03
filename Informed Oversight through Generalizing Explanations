@@ -1,0 +1,39 @@
+<p><script type="math/tex" id="MathJax-Element-1">\DeclareMathOperator{\Info}{Info}</script></p>
+
+
+
+<h2 id="informed-oversight-through-generalizing-explanations">Informed Oversight through Generalizing Explanations</h2>
+
+<p>William Saunders</p>
+
+<p>(This post is aiming to address the Informed oversight problem, as written about by Paul Christiano <a href="https://ai-alignment.com/the-informed-oversight-problem-1b51b4f66b35">here</a>)</p>
+
+<p>Paul Christiano raises the possibility of addressing the informed oversight problem by training an agent to, given a state <script type="math/tex" id="MathJax-Element-515">x</script>, choose an action <script type="math/tex" id="MathJax-Element-516">y</script> and explanation <script type="math/tex" id="MathJax-Element-517">z</script> to maximize the sum of the overseer’s evaluation <script type="math/tex" id="MathJax-Element-518">B(x,y,z)</script> plus a measure of how informative the explanation is with regards to the action <script type="math/tex" id="MathJax-Element-519">\Info(x,y,z)</script>. The hope is that this incentivizes the agent to always take good actions, and provide a good explanation of any information that is relevant to the overseers evaluation.</p>
+
+<p>The problem is that in cases where providing a good explanation reduces the overseer’s evaluation of the action, the agent will tend to either take actions which can be explained well, but are not necessarily good, or to take actions that seem good and withhold explanations.</p>
+
+<hr>
+
+<p>Proposal: allow the overseer to accumulate information over time, such that their evaluation functions are not stationary. Replace the <script type="math/tex" id="MathJax-Element-520">B(x, y, z)</script> function with <script type="math/tex" id="MathJax-Element-521">B(x, y, z_{prev})</script> to reflect the overseers evaluation of the action before viewing the explanation <script type="math/tex" id="MathJax-Element-522">z</script>, but in light of all previous explanations. Change the <script type="math/tex" id="MathJax-Element-523">\Info(x, y, z)</script> function to reward only new information provided to the overseer (that it couldn’t figure out given it’s knowledge and all previous explanations).</p>
+
+<p>In this setup, if there is some action that appears to be good without the explanation, but is actually bad, the agent’s best move is to present it and it’s explanation, receiving high reward for both. But if the agent subsequently tries to present the action and it’s explanation a second time, the overseer will evaluate the action and explanation poorly. Crucially, each action is a separate episode in the setup, so the agent has no incentive to perform poorly in one episode in order to perform better in some subsequent episode.</p>
+
+<p>It seems like this setup removes the opposition of the incentives to explain and to produce good seeming actions. In each episode, there is no cost to improving the agent’s ability to explain itself. For any deceptive action that is explained well enough, it will stop being rewarded and the agent will stop proposing it.</p>
+
+<p>For this to work, the agent’s explanations need to be “generalizable”, informative not only about the particular action, but about a larger class of actions, allowing the overseer to change their oversight procedure or modify the agent to prevent it from taking similar actions in the future. On it’s own, the overseer will have some ability to generalize from explanations for particular actions: by paying more attention to the class of deceptive strategies in the future, by examining a trace of the agent’s computation to look for signs that correlate with the deceptive strategy, etc.  Other examples, for the plagarism case could include:</p>
+
+<ul>
+<li>Pointing locations in the agent’s memory/neural network where it stores the original copy of the book it is trying to plagiarize, allowing the overseer to look at those locations in the future to detect similar plagarism attempts.</li>
+<li>If the agent’s access to the library is normally monitored, but it was able to plagarize by secretly accessing the library through another channel, then the explanation could point out the secret channel that was used, allowing it to be blocked in the future.</li>
+</ul>
+
+<p>Caveats: <br>
+ - It seems like this makes training the agent to produce explanations much more difficult, as it only gets high reward for producing each type of explanation once, and we might need a higher quality of explanation to generalize well. <br>
+ - For any given deceptive strategy, there might be a period of time between when the agent can perform the strategy, and when it can explain it well enough to the overseer to allow them to properly evaluate it (even if there is no information for the agent to hide information, it might just be a harder task to explain things properly). During this time, the agent is not aligned, and it is not possible to detect that the agent is unaligned. However, if all deceptive strategies can eventually be explained, then it seems that in some sense the agent will be aligned in the limit of this process as oversight continues. <br>
+ - This does not help if there are deceptive actions that cannot be explained in a generalizeable manner.</p>
+
+<p>I’d appreciate feedback on this idea (especially additional problems with it)</p>
+
+<blockquote>
+  <p>Written with <a href="https://stackedit.io/">StackEdit</a>.</p>
+</blockquote>
