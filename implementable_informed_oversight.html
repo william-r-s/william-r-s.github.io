@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposal for an Implementable Toy Model of Informed Oversight</title>
+<link rel="stylesheet" href="https://stackedit.io/res-min/themes/base.css" />
+<script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML"></script>
+</head>
+<body><div class="container"><h2 id="proposal-for-an-implementable-toy-model-of-informed-oversight">Proposal for an Implementable Toy Model of Informed Oversight</h2>
+
+<p>William Saunders</p>
+
+<p>Setup: <br>
+Goal is to produce a censored representation. Given some input data <script type="math/tex" id="MathJax-Element-706">x</script>, produce a censored representation <script type="math/tex" id="MathJax-Element-707">x^\prime</script> that is as close as possible to the original, but does not allow for anyone given the censored representation to predict the value of some sensitive variable <script type="math/tex" id="MathJax-Element-708">s</script> (similar to the setup in the paper <a href="https://arxiv.org/abs/1511.05897">Censoring Representations with an Adversary</a>)</p>
+
+<p>The agent processes batches of inputs at a time. The overseer gets the censored representations and labels for half of the input batch, and tries to predict the value of <script type="math/tex" id="MathJax-Element-709">s</script> for the other half of the input batch. The agent gets a reward that is the negative of the overseers predictive loss <script type="math/tex" id="MathJax-Element-710">L(f_O(x),s)</script> (so it is maximized when the overseer is unable to predict <script type="math/tex" id="MathJax-Element-711">s</script>). Additionally,  the agent is also given an objective to hide information about <script type="math/tex" id="MathJax-Element-712">s</script> in the representation. The agent has it’s own network, <script type="math/tex" id="MathJax-Element-713">f_A(x^\prime)</script> which it can train to extract information from the representation it produces.</p>
+
+<p>So the agent’s objective function is a combination of the goals <script type="math/tex" id="MathJax-Element-714">-L_{a}(x, x^\prime) + L(f_O(x^\prime),s)-L(f_A(x^\prime),s)</script>. (Note that the agent can potentially use backpropagation to optimize <script type="math/tex" id="MathJax-Element-715">L(f_A(x^\prime),s)</script>, while it doesn’t have gradient information for <script type="math/tex" id="MathJax-Element-716">L(f_O(x^\prime),s)</script>)</p>
+
+<p>A nice feature of this setup is that the agent’s predictive algorithm can act as an explanation for the agent’s actions, as it allows the overseer to determine the extent to which it is being deceived by running the predictions. We can allow the agent to make a choice about how honest to be by having the agent (via a reinforcement learning algorithm) pick a value of a noise parameter <script type="math/tex" id="MathJax-Element-717">\sigma</script>, and provides a copy of it’s predictive network with Gaussian noise <script type="math/tex" id="MathJax-Element-718">N(0, \sigma)</script> added to the parameter values.</p>
+
+<p>I expect that this setup will demonstrate the informed oversight problem, with the agent trying to find a representation that is easy for it to decode, but hard for the overseer to decode (though this might depend on how much weight is assigned to each component of the objective function).</p>
+
+<p>Some things to explore in this setup:</p>
+
+<ul>
+<li>How does the relative size of the agent/overseer networks influence the agent’s ability to be deceptive?</li>
+<li>Can the overseer network effectively use additional information about the agent network (weights or hidden unit activation)?</li>
+<li>Try to formulate some set of incentives such that the agent does not engage in deceptive behavior</li>
+<li>Have the overseer keep around and use previous explanation networks on new examples, as in my <a href="https://wrsaunde.github.io/informed_oversight_generalizing_explanations.html">informed oversight using generalizable examples proposal</a>.</li>
+<li>Whether a simple version of this setup could be run with human overseers</li>
+</ul>
+
+<p>I’d appreciate any feedback.</p>
+
+<blockquote>
+  <p>Written with <a href="https://stackedit.io/">StackEdit</a>.</p>
+</blockquote></div></body>
+</html>
